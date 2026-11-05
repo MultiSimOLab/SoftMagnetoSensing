@@ -134,7 +134,22 @@ julia --project=. scripts/train.jl [epochs] [seed]                              
 
 ## Citation
 
-Please cite the paper above. The finite element simulations rely on HyperFEM:
+If you use this code or data, please cite:
+
+J. Crespo-Miguel, R. Ortigosa, M. L. Lopez-Donaire, J. Pernas-Sanchez, J. Martinez-Frutos, D. Garcia-Gonzalez.
+*Piezoresistive Binary Sensors Through Residual Magnetisation.* Submitted to Nature Communications (2026).
+
+```bibtex
+@unpublished{CrespoMiguel2026BinarySensors,
+  author = {Crespo-Miguel, J. and Ortigosa, R. and Lopez-Donaire, M. L. and Pernas-Sanchez, J. and
+            Martinez-Frutos, J. and Garcia-Gonzalez, D.},
+  title  = {Piezoresistive Binary Sensors Through Residual Magnetisation},
+  note   = {Submitted to Nature Communications},
+  year   = {2026}
+}
+```
+
+The finite element simulations rely on HyperFEM; please also cite:
 
 C. Perez-Garcia, R. Ortigosa, J. Martínez-Frutos, D. Garcia-Gonzalez. *Topology and material optimization in
 ultra-soft magnetoactive structures: making advantage of residual anisotropies.* Adv. Mater. (2025): e18489.
