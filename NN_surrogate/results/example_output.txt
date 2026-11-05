@@ -1,0 +1,27 @@
+1. Held-out FE designs (49)
+
+w      e      phi_HM  d_BC  (W,h,c)        u_On FE   u_On NN   uUn FE    uUn NN   
+10.0   2.50   20      0.5   (15,36,3)      2.2389    2.2425    3.3239    3.3354   
+10.0   3.00   20      0.0   (15,36,3)      1.8083    1.7859    2.1528    2.1738   
+10.0   3.50   20      0.5   (15,36,3)      2.2906    2.2849    3.8061    3.7630   
+10.0   4.00   30      0.0   (15,36,3)      1.9461    1.9573    2.6867    2.6541   
+11.0   2.50   20      0.5   (15,36,3)      2.4283    2.4332    3.5822    3.5215   
+11.0   3.50   30      0.0   (15,36,3)      2.0839    2.0819    2.7383    2.7494   
+12.0   2.00   30      0.0   (15,36,3)      2.1011    2.0883    2.5317    2.5308   
+12.0   2.00   20      0.5   (15,36,3)      2.6006    2.5867    3.3067    3.3229   
+...
+u_On     R2 = 0.99830   RMSE = 22.5 um
+u_Union  R2 = 0.99935   RMSE = 29.8 um
+
+2. New design (w, e, phi_HM, d_BC, W, h, c) = [7.25, 2.5, 30.0, 0.25, 9.0, 17.0, 2.0]
+   u_On = 1.793 mm, u_Union = 2.263 mm, eps_On = 0.0989, eps_Union = 0.1248
+
+3. Inverse design
+   target (eps_On, eps_Union) from FE design results_SmallDevice_w_10.0_e_2.25_αgrip_0.0_c_30.0.json
+   target      0.10850  0.12228
+   found       0.10850  0.12228   (misfit 9.87e-13, 26316 iterations)
+   start  w = 9.500  e = 2.750  d_BC = 0.500
+   found  w = 9.696  e = 2.546  d_BC = 0.078
+   FE     w = 10.000  e = 2.250  d_BC = 0.000
+   (the inverse problem is not unique: the design found need not coincide
+    with the FE design that produced the target)

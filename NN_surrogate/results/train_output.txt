@@ -1,0 +1,26 @@
+curated designs 409, training 360, held out 49
+epoch 5000   loss 0.025   best 0.022577
+epoch 10000   loss 0.021315   best 0.019803
+epoch 15000   loss 0.020153   best 0.018089
+epoch 20000   loss 0.022187   best 0.017459
+epoch 25000   loss 0.018923   best 0.017065
+epoch 30000   loss 0.018591   best 0.016681
+epoch 35000   loss 0.025043   best 0.016325
+epoch 40000   loss 0.021517   best 0.01606
+epoch 45000   loss 0.022211   best 0.015909
+epoch 50000   loss 0.021028   best 0.015728
+epoch 55000   loss 0.019238   best 0.015549
+epoch 60000   loss 0.020477   best 0.015502
+epoch 65000   loss 0.0179   best 0.015485
+epoch 70000   loss 0.024283   best 0.015423
+epoch 75000   loss 0.023772   best 0.015423
+epoch 80000   loss 0.020527   best 0.015423
+epoch 85000   loss 0.017808   best 0.015423
+epoch 90000   loss 0.018986   best 0.015423
+epoch 95000   loss 0.017222   best 0.015366
+epoch 100000   loss 0.025465   best 0.015366
+training time 125.6 s
+best training loss 0.015366 at epoch 92152
+R2 (joint, standardised)  train 0.99976   held out 0.99863
+RMSE held out (um)  u_On 24.2   u_Union 36.1
+saved models/retrained_L4_N8.bson

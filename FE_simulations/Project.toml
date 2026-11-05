@@ -1,0 +1,20 @@
+name = "SoftMagnetoSensing"
+authors = ["Jesús Martínez-Frutos <jesus.martinez@upct.es>"]
+
+[deps]
+Gmsh = "705231aa-382f-11e9-3f0c-b7cb4346fdeb"
+Gridap = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
+GridapGmsh = "3025c34a-b394-11e9-2a55-3fee550c04c8"
+HyperFEM = "ddbf423a-3df4-409e-9685-3dc416cae46c"
+HyperFEMKernels = "c52e38e0-a033-47df-8a03-a6c4ac881830"
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
+[compat]
+Gmsh = "0.3"
+Gridap = "=0.19.9"
+GridapGmsh = "0.7"
+HyperFEM = "0.2"
+HyperFEMKernels = "0.1"
+JSON = "1"
+julia = "1.12"
