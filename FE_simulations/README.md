@@ -118,11 +118,7 @@ in `sensor_model`).
 
 ## Citation
 
-If you use these scripts, please cite the paper above and HyperFEM:
-
-C. Perez-Garcia, R. Ortigosa, J. Martínez-Frutos, D. Garcia-Gonzalez. *Topology and material optimization
-in ultra-soft magnetoactive structures: making advantage of residual anisotropies.* Adv. Mater. (2025):
-e18489. https://doi.org/10.1002/adma.202518489
+If you use these scripts, please cite the paper above (BibTeX entry in the [main README](../README.md#citation)).
 
 ## Contact
 

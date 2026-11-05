@@ -149,12 +149,6 @@ J. Crespo-Miguel, R. Ortigosa, M. L. Lopez-Donaire, J. Pernas-Sanchez, J. Martin
 }
 ```
 
-The finite element simulations rely on HyperFEM; please also cite:
-
-C. Perez-Garcia, R. Ortigosa, J. Martínez-Frutos, D. Garcia-Gonzalez. *Topology and material optimization in
-ultra-soft magnetoactive structures: making advantage of residual anisotropies.* Adv. Mater. (2025): e18489.
-https://doi.org/10.1002/adma.202518489
-
 ## License
 
 MIT, see [`LICENSE`](LICENSE).
