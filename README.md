@@ -9,6 +9,13 @@ The sensor is a pair of hard-magnetic grippers with residual magnetisation facin
 gap. Under compression the magnetic attraction closes the gap and switches a conductive pathway on and
 off: a binary, piezoresistive response set by the geometry and the particle concentration of the device.
 
+<p align="center">
+  <img src="docs/img/sensor_stage1.jpeg" width="32%" alt="Sensor at the first stage of the loading: gap open">
+  <img src="docs/img/sensor_stage2.jpeg" width="32%" alt="Sensor at an intermediate stage of the loading">
+  <img src="docs/img/sensor_stage3.jpeg" width="32%" alt="Sensor at the last stage of the loading: gap closed">
+</p>
+<p align="center"><em>Finite element simulation of the sensor along the loading: deformed grippers and magnetic field lines in the surrounding air, from the open gap (left) to the closed gap (right).</em></p>
+
 The repository has two independent parts, each with its own Julia environment and README:
 
 | Folder | Content |
