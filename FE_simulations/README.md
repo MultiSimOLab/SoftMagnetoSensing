@@ -33,7 +33,7 @@ data/sims/                        results, one JSON file per configuration
 data/visualization/
   render_frames.py                ParaView script: frames of the animation of one configuration
   plot_force_displacement.py      force–displacement curve and gap opening from the result files
-bench/                            timing and comparison scripts (see below)
+bench/                            timing script and comparison of two result files
 ```
 
 ## Installation
@@ -99,39 +99,21 @@ unit thickness) and opening of the gap against the imposed compression, for 20 %
 - Adaptive load stepping: increments of at most 1/500 of the load path, bisected on failure and grown back
   after easy steps, each one starting from the Dirichlet projection of the new boundary values.
 
-## Comparison with the original scripts
-
-The simulations of the paper were run with the original version of these scripts (Julia 1.10, HyperFEM
-0.0.2, Gridap's lazy assembly, 5000 load increments). This version keeps the model, the mesh and the load path
-and changes the software stack and the solution strategy:
-
-- HyperFEM 0.2 (new boundary-condition API, `NewtonRaphson`, `InjectivityLS`, `HybridTangent`,
-  `regularize_hessian`) and the compiled assembly kernels of HyperFEMKernels 0.1.2;
-- the coupling block ∂²Ψ/∂F∂ℋ₀ of the mechanical equations, missing in the Jacobian of the original scripts
-  (the residual, i.e. the physics, is unchanged; the incomplete Jacobian made the Newton converge linearly,
-  which the 5000 small increments hid);
-- a Newton converged to `rtol = 1e-6`: the original solver accepted every increment after a single iteration
-  (its absolute curvature criterion `|b·dx| < 1e-7` was always met at the force scale of the problem), with
-  relative residuals of 10⁻³–10⁻¹, of the order of the reaction on the loaded face;
-- adaptive load stepping with a Dirichlet predictor (500 increments instead of 5000);
-- a single BLAS thread for the sparse LU (a multi-threaded BLAS made the factorisation ×4 slower and erratic).
+## Performance
 
 Full load path (Λ from 0 to 1), configuration `w = 5, e = 2` (31 683 dofs), Apple M5 Max, 18 Julia threads:
 
-| | original scripts | this version, c = 20 % | this version, c = 30 % |
-|---|---|---|---|
-| load increments (bisections) | 5000 | 509 (15) | 501 (1) |
-| Newton iterations | 5000 (one per increment, not converged) | 1188 | 1237 |
-| total time (including compilation) | ≈ 2.4 h (estimated from the first 100 increments: 1.70 s each) | 8.8 min | 8.6 min |
-| peak resident memory | 5.0 GB (first 100 increments) | 6.5 GB | 6.6 GB |
+| | c = 20 % | c = 30 % |
+|---|---|---|
+| load increments (bisections) | 509 (15) | 501 (1) |
+| Newton iterations | 1188 | 1237 |
+| total time (including compilation) | 8.8 min | 8.6 min |
+| peak resident memory | 6.5 GB | 6.6 GB |
 
-The full parametric study (50 configurations) goes from about five days of computation to about seven hours,
-less with several configurations at a time. Over the part of the load path computed with the original scripts
-(Λ ≤ 0.113) the gap displacements agree with them to 0.2 % and the reaction on the fixed face to 0.6 %; the
-reaction on the loaded face of the original scripts carries an error of 5–12 % from their unconverged Newton.
-With the adaptive increments, the remaining difference with a converged solution with 5000 increments is the
-first-order error of the Maxwell traction, evaluated once per increment: 0.04 % in the gap displacements and
-1–3 % in the reactions.
+The full parametric study (50 configurations) takes about seven hours run one after the other, less with
+several configurations at a time. With the adaptive increments, the difference with a solution computed with
+10 times smaller increments is 0.04 % in the gap displacements and 1–3 % in the reactions (the first-order
+error of the Maxwell traction, evaluated once per increment).
 
 ## Citation
 

@@ -1,4 +1,4 @@
-# One configuration with timing and memory report (used for the comparison with the legacy version):
+# One configuration with a timing and memory report:
 #   julia --project=. -t N bench/run_case.jl iw ie concentration nsteps backend nmax [meshdir]
 using HyperFEM, HyperFEMKernels
 using HyperFEM.TensorAlgebra: regularize_hessian

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare two result files of the sensor (e.g. legacy vs new).
+"""Compare two result files of the sensor (e.g. two solver settings or two runs).
 
     python3 bench/compare.py a.json b.json [Λmin]
 

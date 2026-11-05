@@ -37,7 +37,7 @@ The repository has two independent parts, each with its own Julia environment (`
 | `data/visualization/plot_force_displacement.py` | Force–displacement curve and gap opening of one or several configurations from their result files |
 | `bench/run_case.jl` | One configuration with a timing and memory report |
 | `bench/compare.py` | Comparison of two result files (maximum difference per quantity) |
-| `README.md` | Model, solver and the comparison with the original scripts of the paper |
+| `README.md` | Model, solver and performance |
 
 ### `NN_surrogate/` — neural-network surrogate
 
@@ -80,8 +80,8 @@ julia --project=. -t auto src/parametric_study.jl
 The script generates the meshes that are missing in `data/models/`, solves the 50 configurations (by
 default half as many at a time as Julia threads; the assembly kernels of all of them share the threads and
 the sparse LU of each case, which is serial, overlaps with the others) and writes the results to
-`data/sims/SmallMagnet_ParametricStudy/`. With 5000 load steps per configuration a full study takes many
-hours on a workstation.
+`data/sims/SmallMagnet_ParametricStudy/`. Each configuration takes about nine minutes on a workstation (see
+the performance section of [`FE_simulations/README.md`](FE_simulations/README.md#performance)).
 
 **3. A single configuration** from the Julia REPL (`julia --project=. -t auto` in `FE_simulations`):
 
