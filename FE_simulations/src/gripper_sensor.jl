@@ -8,13 +8,17 @@
 # Monolithic magneto-mechanical formulation (displacement u, scalar magnetic potential φ) solved
 # with HyperFEM on a Gridap mesh. The Maxwell stress of the air acts on the solid as a traction on
 # the solid–air interface, updated at the start of every load step (staggered within the step).
+# The load path is followed with an adaptive increment (bisection on failure, growth after easy steps)
+# and a Dirichlet predictor; the Newton uses the consistent tangent, with a projected (positive-definite)
+# mechanical tangent only as a fallback when the line search fails.
 #
 # "Piezoresistive Binary Sensors Through Residual Magnetisation" (submitted to Nature Communications)
 #***********************************************************************************************
 
 """
     sensor_model(geomodel, w, e, αgrip, concentration; T₀=0.1, uapplied=15.5, simdir, backend=:compiled,
-                 paraview=false, verbose=1, callback=nothing, newton=(maxiter=40, atol=1e-9, rtol=1e-3))
+                 paraview=false, verbose=1, callback=nothing, newton=(maxiter=40, atol=1e-9, rtol=1e-6),
+                 tangent=:hybrid, atol_projected=1e-8)
 
 Build the finite element model of one sensor configuration on the Gmsh model `geomodel` (see
 `data/models/mesh_generation.jl`): gripper width `w`, gap `e`, loaded-height parameter `αgrip` and
@@ -24,16 +28,23 @@ fraction `T₀` of the load path; afterwards the compression `uapplied` is appli
 Returns a named tuple with the computational model `comp_model` (a `StaticNonlinearModel` of HyperFEM),
 its Newton solver `nls`, the post-processor `post` (reactions on the loaded faces and vertical
 displacement of the gap corners, written after every converged load step to the JSON file `jsonfile`
-in `simdir`; with `paraview=true` a `.vtu` file per step), the multi-field space `U` and the state `xh`.
+in `simdir`; with `paraview=true` a `.vtu` file per step, collected in `Results.pvd`, with the displacement,
+the magnetic potential, the spatial magnetic field `h = F⁻ᵀℋ₀`, its magnitude and the material region
+of every cell, see `data/visualization/`), the multi-field space `U` and the state `xh`.
 
 `backend` is the assembly backend of HyperFEM (`:compiled` for the fused, threaded kernels of
 HyperFEMKernels, `:lazy` for Gridap's assembly); `newton` the stopping criteria of the Newton–Raphson
-solver (`‖R‖ < atol` or `‖R‖/‖R₀‖ < rtol`, at most `maxiter` iterations). `callback(step, Λ)`, if
-given, is called after every converged load step (e.g. to monitor or stop a run).
+solver (`‖R‖ < atol` or `‖R‖/‖R₀‖ < rtol`, at most `maxiter` iterations); `tangent` the mechanical
+tangents of the Jacobian: `:hybrid` (consistent tangents, switched to the projected ones only when the
+line search fails: `HybridTangent` of HyperFEM, quadratic convergence; in projected mode the Newton stops
+at `‖R‖ < atol_projected`, above the round-off floor of the residual of the compressed device) or
+`:projected` (eigenvalues clamped from below at every quadrature point, robust but linearly convergent). `callback(step, Λ)`, if given, is
+called after every converged load step (e.g. to monitor or stop a run).
 """
 function sensor_model(geomodel, w, e, αgrip, concentration;
                       T₀=0.1, uapplied=15.5, simdir=pwd(), backend=:compiled, paraview=false, verbose=1,
-                      callback=nothing, newton=(maxiter=40, atol=1e-9, rtol=1e-3))
+                      callback=nothing, newton=(maxiter=40, atol=1e-9, rtol=1e-6), tangent=:hybrid,
+                      atol_projected=1e-8)
    #********************
    # Constitutive models
    #********************
@@ -147,11 +158,15 @@ function sensor_model(geomodel, w, e, αgrip, concentration;
    _, ∂Ψs2∂F, ∂Ψs2∂H0, ∂Ψs2∂FF_, ∂Ψs2∂H0F, ∂Ψs2∂H0H0        = model_solid2()
    _, ∂Ψs3∂F, ∂Ψs3∂H0, ∂Ψs3∂FF_, ∂Ψs3∂H0F, ∂Ψs3∂H0H0        = model_solid3()
 
-   # Stabilised (projected) mechanical tangents: eigenvalues clamped from below
-   ∂Ψair∂FF(F)     = regularize_hessian(∂Ψair∂FF_(F), μv * 1e-2)
-   ∂Ψs1∂FF(F, H, N) = regularize_hessian(∂Ψs1∂FF_(F, H, N), μ1 * 1e-4)
-   ∂Ψs2∂FF(F, H, N) = regularize_hessian(∂Ψs2∂FF_(F, H, N), μ2 * 1e-6)
-   ∂Ψs3∂FF(F, H, N) = regularize_hessian(∂Ψs3∂FF_(F, H, N), μ3 * 1e-6)
+   # Stabilised (projected) mechanical tangents: eigenvalues clamped from below, always (`:projected`) or
+   # only while the Newton is in projected mode (`:hybrid`, the switch is flipped by the solver)
+   tangent in (:projected, :hybrid) || error("tangent must be :projected or :hybrid (got $tangent)")
+   switch = tangent === :hybrid ? TangentSwitch() : nothing
+   project(C, δ) = (switch === nothing || is_projected(switch)) ? regularize_hessian(C, δ) : C
+   ∂Ψair∂FF(F)     = project(∂Ψair∂FF_(F), μv * 1e-2)
+   ∂Ψs1∂FF(F, H, N) = project(∂Ψs1∂FF_(F, H, N), μ1 * 1e-4)
+   ∂Ψs2∂FF(F, H, N) = project(∂Ψs2∂FF_(F, H, N), μ2 * 1e-6)
+   ∂Ψs3∂FF(F, H, N) = project(∂Ψs3∂FF_(F, H, N), μ3 * 1e-6)
 
    # Kinematics and magnetisation direction of the grippers
    F, H, J = get_Kinematics(Kinematics(Mechano, Solid))
@@ -201,7 +216,12 @@ function sensor_model(geomodel, w, e, αgrip, concentration;
          ∫(∇(vφ) ⋅ ((∂Ψs1∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(du)'))dΩmag1 -
          ∫(∇(vφ) ⋅ ((∂Ψs2∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(du)'))dΩmag2 -
          ∫(∇(vφ) ⋅ ((∂Ψs3∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(du)'))dΩmag3 -
-         ∫(∇(vφ) ⋅ ((∂ΨMax∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(du)'))dΩair +
+         ∫(∇(vφ) ⋅ ((∂ΨMax∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(du)'))dΩair -
+         # mechanical equations of the grippers with respect to φ (the air carries no Maxwell stress in its
+         # mechanical equations: it acts on the solid through the explicit traction tmaxw)
+         ∫(∇(dφ) ⋅ ((∂Ψs1∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(v)'))dΩmec1 -
+         ∫(∇(dφ) ⋅ ((∂Ψs2∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(v)'))dΩmec2 -
+         ∫(∇(dφ) ⋅ ((∂Ψs3∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(v)'))dΩmec3 +
          ∫(αj * (jump(∇(du)) ⊙ jump(∇(v))))dΓsk
    end
 
@@ -211,8 +231,10 @@ function sensor_model(geomodel, w, e, αgrip, concentration;
    # 2D, first-order elements: a sparse LU is the fastest linear solver at this size. The injectivity-
    # preserving line search keeps det F > 0 at every quadrature point of the displacement field.
    linesearch = InjectivityLS(; β=1 - 1e-4, ρ=0.5, c=0.95, maxiter=15, αmin=1e-16)
-   nls        = NewtonRaphson(LUSolver(); newton..., verbose, linesearch)
-   comp_model = StaticNonlinearModel(res, jac, U, V, D_bc; nls, xh, backend, injectivity=(dΩdomain, 1))
+   strategy   = switch === nothing ? ConsistentTangent() : HybridTangent(; atol_projected)
+   nls        = NewtonRaphson(LUSolver(); newton..., verbose, linesearch, tangent=strategy)
+   comp_model = StaticNonlinearModel(res, jac, U, V, D_bc; nls, xh, backend,
+                                     injectivity=(dΩdomain, 1), tangent_switch=switch)
 
    #******************************************************
    # Post-processing: reactions on the loaded faces and vertical displacement of the gap corners
@@ -230,13 +252,25 @@ function sensor_model(geomodel, w, e, αgrip, concentration;
    tag      = "w_$(w)_e_$(e)_αgrip_$(αgrip)_c_$(concentration)"
    jsonfile = joinpath(simdir, "results_SmallDevice_$(tag).json")
 
+   # Fields of the .vtu files: material region of every cell (0 air, 1 soft part of the grippers, 2 and 3
+   # the two hard-magnetic materials) and the spatial magnetic field h = F⁻ᵀℋ₀ in the deformed configuration
+   cell_tags = Gridap.Geometry.get_face_tag_index(get_face_labeling(geomodel),
+                  ["Air", "MagnetoOmega1", "MagnetoOmega2", "MagnetoOmega3"], num_cell_dims(geomodel))
+   regions   = cell_tags[Gridap.Geometry.get_glue(Ωdomain, Val(num_cell_dims(geomodel))).tface_to_mface] .- 1
+   hspatial(F, ℋ) = inv(F)' ⋅ ℋ
+   vtkdir    = joinpath(simdir, "vtk_$(tag)")
+   paraview && mkpath(vtkdir)
+
    function postprocess(post)
       Λ  = post.Λ[post.iter]
       xh = FEFunction(U, post.comp_model.caches.x)
       uh, φh = xh[1], xh[2]
       if paraview
-         writevtk(Ωdomain, joinpath(simdir, "monolithic_SmallDevice_$(tag)_$(post.iter).vtu"),
-                  cellfields=["u" => uh, "φ" => φh, "J" => J ∘ (F ∘ (∇(uh)'))])
+         h = hspatial ∘ (F ∘ (∇(uh)'), ℋ₀ ∘ (∇(φh)))
+         post.cachevtk[3][Λ] = createvtk(Ωdomain, joinpath(vtkdir, "step_$(lpad(post.iter, 4, '0'))"),
+                                          cellfields=["u" => uh, "φ" => φh, "h" => h, "|h|" => norm ∘ h,
+                                                      "J" => J ∘ (F ∘ (∇(uh)'))],
+                                          celldata=["region" => regions])
       end
       # internal forces of the grippers, summed on the loaded faces (reaction = -internal force)
       lsolid(v) = ∫(∇(v)' ⊙ (∂Ψs1∂F ∘ (F ∘ (∇(uh)'), ℋ₀ ∘ (∇(φh)), Nh)))dΩmec1 +
@@ -256,19 +290,25 @@ function sensor_model(geomodel, w, e, αgrip, concentration;
       callback === nothing || callback(post.iter, Λ)
    end
 
-   post = PostProcessor(comp_model, postprocess; is_vtk=paraview, filepath=simdir)
+   post = PostProcessor(comp_model, postprocess; is_vtk=paraview, filepath=paraview ? vtkdir : simdir)
    return (; comp_model, nls, post, jsonfile, U, xh)
 end
 
 """
-    run_case(geomodel, w, e, αgrip, concentration; nsteps=5000, maxbisec=10, kwargs...) -> jsonfile
+    run_case(geomodel, w, e, αgrip, concentration; nsteps=500, maxbisec=10, grow=2.0, easy=5,
+             ProjectDirichlet=true, kwargs...) -> jsonfile
 
 Build the model of one configuration ([`sensor_model`](@ref), whose keywords are forwarded) and solve
-it along the load path with `nsteps` increments (a failed increment is bisected, at most `maxbisec`
-consecutive times). Returns the path of the JSON file with the results.
+it along the load path Λ ∈ [0, 1]. The load increment starts at `1/nsteps`; a failed increment is
+bisected (at most `maxbisec` consecutive times) and, after an increment converged in at most `easy`
+Newton iterations, the next one grows by `grow` (never above `1/nsteps`). With `ProjectDirichlet` every
+increment starts from the Dirichlet projection of the new boundary values, cut by the injectivity-
+preserving step (`det F > 0`). Returns the path of the JSON file with the results.
 """
-function run_case(geomodel, w, e, αgrip, concentration; nsteps=5000, maxbisec=10, kwargs...)
+function run_case(geomodel, w, e, αgrip, concentration; nsteps=500, maxbisec=10, grow=2.0, easy=5,
+                  ProjectDirichlet=true, kwargs...)
    m = sensor_model(geomodel, w, e, αgrip, concentration; kwargs...)
-   solve!(m.comp_model; stepping=(nsteps=nsteps, maxbisec=maxbisec), ProjectDirichlet=false, post=m.post)
+   stepping = LoadStepping(; nsteps, maxbisec, grow, easy)
+   solve!(m.comp_model; stepping, ProjectDirichlet, post=m.post)
    return m.jsonfile
 end

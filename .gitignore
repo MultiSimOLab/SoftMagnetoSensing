@@ -2,6 +2,7 @@
 FE_simulations/data/sims/
 FE_simulations/data/models/*.msh
 FE_simulations/bench/logs/
+FE_simulations/bench/results/
 NN_surrogate/models/retrained_*.bson
 *.vtu
 *.pvd

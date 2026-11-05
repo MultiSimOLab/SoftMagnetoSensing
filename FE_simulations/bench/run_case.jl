@@ -19,30 +19,42 @@ nsteps  = parse(Int, ARGS[4])
 backend = Symbol(ARGS[5])
 nmax    = parse(Int, ARGS[6])        # stop after this many converged steps
 meshdir = length(ARGS) >= 7 ? ARGS[7] : joinpath(@__DIR__, "..", "data", "models")
-rtol    = parse(Float64, get(ENV, "SMS_RTOL", "1e-3"))   # Newton relative tolerance (diagnostics)
+rtol    = parse(Float64, get(ENV, "SMS_RTOL", "1e-6"))   # Newton relative tolerance
+grow    = parse(Float64, get(ENV, "SMS_GROW", "2.0"))    # growth of the load increment after an easy step
+easy    = parse(Int, get(ENV, "SMS_EASY", "5"))         # Newton iterations of an easy step
+proj    = get(ENV, "SMS_PROJ", "1") == "1"               # Dirichlet projection (predictor) at every step
+lmax    = parse(Float64, get(ENV, "SMS_LMAX", "1.0"))    # stop at this load factor
+paraview = get(ENV, "SMS_VTK", "0") == "1"               # write the .vtu files of every step
+tangent = Symbol(get(ENV, "SMS_TANGENT", "hybrid"))   # :projected or :hybrid
 
 e = range(2, 3, 5); w = range(5, 7, 5); αgrip = 1.0
-simdir = joinpath(@__DIR__, "..", "data", "sims", "bench_$(backend)_t$(Threads.nthreads())_nsteps$(nsteps)_nmax$(nmax)_rtol$(rtol)")
+simdir = joinpath(@__DIR__, "..", "data", "sims", "bench_$(backend)_t$(Threads.nthreads())_nsteps$(nsteps)_nmax$(nmax)_rtol$(rtol)_grow$(grow)_easy$(easy)_proj$(Int(proj))_lmax$(lmax)_$(tangent)")
 mkpath(simdir)
 geomodel = GmshDiscreteModel(mesh_file(w[iw], e[ie], αgrip; dir=meshdir))
 
 struct StopRun <: Exception end
 step_times = Float64[]
-stop_after(step, Λ) = (push!(step_times, time()); step >= nmax && throw(StopRun()))
+verbose = parse(Int, get(ENV, "SMS_VERBOSE", "1"))
+function stop_after(step, Λ)
+   push!(step_times, time())
+   flush(stdout)
+   (step >= nmax || Λ >= lmax - 1e-12) && throw(StopRun())
+end
 
 GC.gc()
 t0 = time()
-m = sensor_model(geomodel, w[iw], e[ie], αgrip, conc; simdir, backend, verbose=1, callback=stop_after,
-                 newton=(maxiter=40, atol=1e-9, rtol))
+m = sensor_model(geomodel, w[iw], e[ie], αgrip, conc; simdir, backend, verbose, callback=stop_after,
+                 newton=(maxiter=40, atol=1e-9, rtol), tangent, paraview)
 t = @timed try
-   solve!(m.comp_model; stepping=(nsteps=nsteps, maxbisec=10), ProjectDirichlet=false, post=m.post)
+   solve!(m.comp_model; stepping=LoadStepping(; nsteps, maxbisec=10, grow, easy), ProjectDirichlet=proj, post=m.post)
 catch err
    err isa StopRun || rethrow()
 end
 HyperFEM.Solvers.print_summary(m.nls.log)
+paraview && HyperFEM.ComputationalModels.vtk_save(m.post)
 open(io -> JSON.print(io, step_times .- t0), joinpath(simdir, "step_times.json"), "w")
 n = length(step_times)
 println("=== steps=$n  t_first_step_s=$(step_times[1]-t0)  t_per_step_after_first_s=$((step_times[end]-step_times[1])/max(n-1,1))")
-println("=== NEW backend=$backend case iw=$iw ie=$ie c=$conc nsteps=$nsteps threads=$(Threads.nthreads()) rtol=$rtol")
+println("=== NEW backend=$backend case iw=$iw ie=$ie c=$conc nsteps=$nsteps threads=$(Threads.nthreads()) rtol=$rtol grow=$grow easy=$easy proj=$proj lmax=$lmax tangent=$tangent paraview=$paraview")
 println("=== time_s=$(t.time) alloc_GB=$(t.bytes/1e9) gctime_s=$(t.gctime) maxrss_GB=$(Sys.maxrss()/1e9)")
 println("=== julia=$(VERSION) HyperFEM=$(pkgversion(HyperFEM)) HyperFEMKernels=$(pkgversion(HyperFEMKernels)) Gridap=$(pkgversion(Gridap))")

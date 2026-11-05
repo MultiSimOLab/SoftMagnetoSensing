@@ -21,7 +21,7 @@ kernels of [HyperFEMKernels](https://github.com/MultiSimOLab/HyperFEMKernels.jl)
 ## Contents
 
 ```
-Project.toml / Manifest.toml      Julia environment (Julia ≥ 1.12, HyperFEM 0.2, HyperFEMKernels 0.1)
+Project.toml / Manifest.toml      Julia environment (Julia ≥ 1.12, HyperFEM 0.2, HyperFEMKernels 0.1.2)
 README.md
 src/
   gripper_sensor.jl               sensor_model(...): constitutive models, weak forms, solver and
@@ -30,7 +30,10 @@ src/
 data/models/
   mesh_generation.jl              Gmsh geometry and mesh of the device (the .msh files are written here)
 data/sims/                        results, one JSON file per configuration
-bench/                            scripts of the comparison with the original version (see below)
+data/visualization/
+  render_frames.py                ParaView script: frames of the animation of one configuration
+  plot_force_displacement.py      force–displacement curve and gap opening from the result files
+bench/                            timing and comparison scripts (see below)
 ```
 
 ## Installation
@@ -72,8 +75,13 @@ geomodel = GmshDiscreteModel(gripper_mesh(5.0, 2.0, 1.0; dir="data/models"))
 run_case(geomodel, 5.0, 2.0, 1.0, 20.0; simdir="data/sims", paraview=true, verbose=1)
 ```
 
-With `paraview=true` a `.vtu` file (displacement, potential and Jacobian of the deformation) is
-written at every converged step.
+With `paraview=true` a `.vtu` file is written at every converged step (displacement, potential, spatial
+magnetic field `h = F⁻ᵀℋ₀`, its magnitude, Jacobian of the deformation and material region of every cell),
+collected in `Results.pvd`; `data/visualization/render_frames.py` turns them into the frames of an animation.
+
+<p align="center"><img src="../docs/img/force_displacement_c20_vs_c30.png" width="95%" alt="Force–displacement curves"></p>
+<p align="center"><em>Configuration w = 5 mm, e = 2 mm: vertical reaction on the loaded and fixed faces (half model, per
+unit thickness) and opening of the gap against the imposed compression, for 20 % and 30 % particle concentration.</em></p>
 
 ## Model and solver
 
@@ -83,38 +91,47 @@ written at every converged step.
 - Air: ideal magnetic medium; the Maxwell stress of the air acts on the solid as a traction on the
   solid–air interface, evaluated at the start of every load step. The mesh of the air follows the solid
   with a fictitious ARAP hyperelastic model stabilised by a gradient-jump penalty on its interior facets.
-- The material tangents are projected (eigenvalues clamped from below) for robustness.
-- Newton–Raphson with an injectivity-preserving line search (`det F > 0` at every quadrature point)
-  and a sparse LU solver, 5000 load increments with bisection on failure.
+- Newton–Raphson with the consistent tangent (including the magneto-mechanical coupling blocks of both the
+  mechanical and the magnetic equations) and quadratic convergence; when the line search fails the
+  mechanical tangents are projected (eigenvalues clamped from below) until the residual drops
+  (`HybridTangent` of HyperFEM). Injectivity-preserving line search (`det F > 0` at every quadrature point)
+  and sparse LU solver (2D, ~32k dofs).
+- Adaptive load stepping: increments of at most 1/500 of the load path, bisected on failure and grown back
+  after easy steps, each one starting from the Dirichlet projection of the new boundary values.
 
 ## Comparison with the original scripts
 
 The simulations of the paper were run with the original version of these scripts (Julia 1.10, HyperFEM
-0.0.2, Gridap's lazy assembly). This version keeps the model, the mesh and the load path and changes the
-software stack: HyperFEM 0.2 (new boundary-condition API, `NewtonRaphson` with the `InjectivityLS` line
-search, `regularize_hessian` for the projected tangents), the compiled assembly kernels of HyperFEMKernels,
-and a single BLAS thread for the sparse LU. `bench/run_case.jl` runs one configuration with a timing and
-memory report, `bench/compare.py` compares two result files.
+0.0.2, Gridap's lazy assembly, 5000 load increments). This version keeps the model, the mesh and the load path
+and changes the software stack and the solution strategy:
 
-Measured on the configuration `w = 5, e = 2, c = 20 %` (31 683 dofs), 100 of the 5000 load steps, Apple M5 Max:
+- HyperFEM 0.2 (new boundary-condition API, `NewtonRaphson`, `InjectivityLS`, `HybridTangent`,
+  `regularize_hessian`) and the compiled assembly kernels of HyperFEMKernels 0.1.2;
+- the coupling block ∂²Ψ/∂F∂ℋ₀ of the mechanical equations, missing in the Jacobian of the original scripts
+  (the residual, i.e. the physics, is unchanged; the incomplete Jacobian made the Newton converge linearly,
+  which the 5000 small increments hid);
+- a Newton converged to `rtol = 1e-6`: the original solver accepted every increment after a single iteration
+  (its absolute curvature criterion `|b·dx| < 1e-7` was always met at the force scale of the problem), with
+  relative residuals of 10⁻³–10⁻¹, of the order of the reaction on the loaded face;
+- adaptive load stepping with a Dirichlet predictor (500 increments instead of 5000);
+- a single BLAS thread for the sparse LU (a multi-threaded BLAS made the factorisation ×4 slower and erratic).
 
-| | original (1 thread) | this version, `:lazy` (1 thread) | this version, `:compiled` (1 thread) | this version, `:compiled` (18 threads) |
-|---|---|---|---|---|
-| time per load step | 1.70 s | 1.16 s | 0.61 s | 0.53 s |
-| Newton iterations per step | 1 | 2.2 | 2.2 | 2.2 |
-| assembly per Newton iteration | ≈ 0.6 s | 0.39 s | 0.12 s | 0.076 s |
-| LU factorisation per iteration | ≈ 0.5 s | 0.09 s | 0.11 s | 0.12 s |
-| memory allocated per step | 2.6 GB | 1.3 GB | 0.6 GB | 0.6 GB |
-| peak resident memory | 5.0 GB | 6.3 GB | 7.3 GB | 6.8 GB |
+Full load path (Λ from 0 to 1), configuration `w = 5, e = 2` (31 683 dofs), Apple M5 Max, 18 Julia threads:
 
-The Newton solver of the original scripts accepted every load step after a single iteration (its absolute
-curvature criterion `|b·dx| < 1e-7` was always met at the force scale of the problem), with relative residuals
-between 3·10⁻³ and 10⁻¹; this version iterates to the stated tolerance. With the same single iteration per step
-(`newton = (maxiter=40, atol=1e-9, rtol=0.5)`) the two versions agree to 10⁻⁷ (displacements) and 2·10⁻⁵
-(reactions) in relative terms. With the converged Newton the gap displacements agree with the original results
-to 0.2 % and the reaction on the fixed face to 0.6 % over the magnetisation phase and the onset of compression
-(Λ ≤ 0.113); the reaction on the loaded face is sensitive to the residual left by the Newton (see `newton`
-in `sensor_model`).
+| | original scripts | this version, c = 20 % | this version, c = 30 % |
+|---|---|---|---|
+| load increments (bisections) | 5000 | 509 (15) | 501 (1) |
+| Newton iterations | 5000 (one per increment, not converged) | 1188 | 1237 |
+| total time (including compilation) | ≈ 2.4 h (estimated from the first 100 increments: 1.70 s each) | 8.8 min | 8.6 min |
+| peak resident memory | 5.0 GB (first 100 increments) | 6.5 GB | 6.6 GB |
+
+The full parametric study (50 configurations) goes from about five days of computation to about seven hours,
+less with several configurations at a time. Over the part of the load path computed with the original scripts
+(Λ ≤ 0.113) the gap displacements agree with them to 0.2 % and the reaction on the fixed face to 0.6 %; the
+reaction on the loaded face of the original scripts carries an error of 5–12 % from their unconverged Newton.
+With the adaptive increments, the remaining difference with a converged solution with 5000 increments is the
+first-order error of the Maxwell traction, evaluated once per increment: 0.04 % in the gap displacements and
+1–3 % in the reactions.
 
 ## Citation
 

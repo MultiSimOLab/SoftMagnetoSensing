@@ -2,7 +2,7 @@
 
 julia_version = "1.13.0"
 manifest_format = "2.1"
-project_hash = "364adaea5e1be401f65b3411bd1faa7ee0d771b1"
+project_hash = "0b9b3a3eeb361bd3f5cebad1376fcec2aedfff68"
 
 [[deps.ADTypes]]
 deps = ["PrecompileTools"]
@@ -664,10 +664,10 @@ version = "0.2.0"
 
 [[deps.HyperFEMKernels]]
 deps = ["ForwardDiff", "Gridap", "LinearAlgebra", "RuntimeGeneratedFunctions", "SparseArrays", "StaticArrays"]
-git-tree-sha1 = "fbf356a07aae5c2729c458fba83a925bfacde07d"
+git-tree-sha1 = "6e19f6c34c26a2d7ef15750f3917ab7567cba16e"
 registries = "General"
 uuid = "c52e38e0-a033-47df-8a03-a6c4ac881830"
-version = "0.1.1"
+version = "0.1.2"
 
 [[deps.IfElse]]
 git-tree-sha1 = "debdd00ffef04665ccbb3e150747a77560e8fad1"

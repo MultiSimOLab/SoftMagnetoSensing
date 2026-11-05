@@ -47,7 +47,7 @@ semaphore = Base.Semaphore(concurrent)
    Threads.@spawn begin
       Base.acquire(semaphore)
       try
-         t = @elapsed run_case(geomodels[(wi, ei)], wi, ei, αgrip, c; T₀=0.1, uapplied=15.5, nsteps=5000, simdir, verbose=0)
+         t = @elapsed run_case(geomodels[(wi, ei)], wi, ei, αgrip, c; T₀=0.1, uapplied=15.5, simdir, verbose=0)
          println("case w = $wi, e = $ei, c = $c %: done in $(round(t / 60; digits=1)) min")
       finally
          Base.release(semaphore)

@@ -10,11 +10,9 @@ gap. Under compression the magnetic attraction closes the gap and switches a con
 off: a binary, piezoresistive response set by the geometry and the particle concentration of the device.
 
 <p align="center">
-  <img src="docs/img/sensor_stage1.jpeg" width="32%" alt="Sensor at the first stage of the loading: gap open">
-  <img src="docs/img/sensor_stage2.jpeg" width="32%" alt="Sensor at an intermediate stage of the loading">
-  <img src="docs/img/sensor_stage3.jpeg" width="32%" alt="Sensor at the last stage of the loading: gap closed">
+  <img src="docs/img/sensor_c20_vs_c30.gif" width="90%" alt="Finite element simulation of the sensor with 20 % and 30 % particle concentration">
 </p>
-<p align="center"><em>Finite element simulation of the sensor along the loading: deformed grippers and magnetic field lines in the surrounding air, from the open gap (left) to the closed gap (right).</em></p>
+<p align="center"><em>Finite element simulation of the sensor (gripper width w = 5 mm, gap e = 2 mm) with 20 % (left) and 30 % (right) particle concentration: the remanent magnetisation ramps up, then the device is compressed until the grippers snap into contact. Magnetic field lines and field magnitude (log scale) in the air; soft part of the grippers in light grey, hard-magnetic materials in black and dark grey.</em></p>
 
 The repository has two independent parts, each with its own Julia environment (`Project.toml` /
 `Manifest.toml`, versions pinned) and its own README with further detail:
@@ -31,10 +29,12 @@ The repository has two independent parts, each with its own Julia environment (`
 | Path | Content |
 |---|---|
 | `Project.toml`, `Manifest.toml` | Julia environment (Julia ≥ 1.12): HyperFEM 0.2, HyperFEMKernels 0.1, Gridap 0.19.9, GridapGmsh, JSON |
-| `src/gripper_sensor.jl` | The model. `sensor_model(geomodel, w, e, αgrip, c; ...)` builds the constitutive models (air, soft part of the grippers, two hard-magnetic materials), the boundary conditions, the weak forms (monolithic displacement–magnetic potential problem, Maxwell traction on the solid–air interface, gradient-jump stabilisation of the air), the Newton–Raphson solver with an injectivity-preserving line search, and the post-processing. `run_case(...)` builds the model and solves it along the load path (5000 load steps by default) |
+| `src/gripper_sensor.jl` | The model. `sensor_model(geomodel, w, e, αgrip, c; ...)` builds the constitutive models (air, soft part of the grippers, two hard-magnetic materials), the boundary conditions, the weak forms (monolithic displacement–magnetic potential problem, Maxwell traction on the solid–air interface, gradient-jump stabilisation of the air), the Newton–Raphson solver with an injectivity-preserving line search, and the post-processing. `run_case(...)` builds the model and solves it along the load path (adaptive load increments, 1/500 at most) |
 | `src/parametric_study.jl` | The full study: generates the meshes and solves the 50 configurations (5 widths `w` × 5 gaps `e` × 2 concentrations), several at a time |
 | `data/models/mesh_generation.jl` | Gmsh geometry and mesh of the device, `gripper_mesh(w, e, αgrip; dir)`; the `.msh` files are written to this folder |
 | `data/sims/` | Results, one JSON file per configuration: load factor `step` (Λ), reactions `t_top`, `t_bottom` on the loaded faces (vectors `[Rx, Ry]`) and vertical displacements of the four corners of the gap (`uy_top_right`, `uy_bottom_right`, `uy_top_left`, `uy_bottom_left`). Not tracked by git |
+| `data/visualization/render_frames.py` | ParaView (`pvbatch`) script rendering the frames of the animation of one configuration from its `.vtu` files |
+| `data/visualization/plot_force_displacement.py` | Force–displacement curve and gap opening of one or several configurations from their result files |
 | `bench/run_case.jl` | One configuration with a timing and memory report |
 | `bench/compare.py` | Comparison of two result files (maximum difference per quantity) |
 | `README.md` | Model, solver and the comparison with the original scripts of the paper |
@@ -103,20 +103,31 @@ Keywords of `run_case`:
 | Keyword | Default | Meaning |
 |---|---|---|
 | `verbose` | `1` | `0` silent, `1` one line per load step, `2` every Newton iteration |
-| `paraview` | `false` | `true` writes a `.vtu` file (displacement, potential, Jacobian of the deformation) at every converged step |
-| `nsteps` | `5000` | load increments along the load path (a failed increment is bisected, at most `maxbisec = 10` consecutive times) |
+| `paraview` | `false` | `true` writes a `.vtu` file per converged step (displacement, potential, spatial magnetic field, its magnitude, Jacobian of the deformation, material region), collected in `Results.pvd` |
+| `nsteps`, `grow`, `easy`, `maxbisec` | `500`, `2.0`, `5`, `10` | adaptive load stepping: the increment starts at `1/nsteps`, a failed increment is bisected (at most `maxbisec` consecutive times) and the increment grows by `grow` (up to `1/nsteps`) after a step converged in at most `easy` Newton iterations |
+| `ProjectDirichlet` | `true` | every increment starts from the Dirichlet projection of the new boundary values, cut by the injectivity-preserving factor (`det F > 0`) |
 | `backend` | `:compiled` | `:compiled` (threaded kernels of HyperFEMKernels) or `:lazy` (Gridap's assembly) |
-| `newton` | `(maxiter=40, atol=1e-9, rtol=1e-3)` | stopping criteria of the Newton–Raphson solver |
+| `newton` | `(maxiter=40, atol=1e-9, rtol=1e-6)` | stopping criteria of the Newton–Raphson solver |
+| `tangent`, `atol_projected` | `:hybrid`, `1e-8` | consistent tangent, switched to the projected (positive-definite) mechanical tangent only when the line search fails, with the absolute tolerance `atol_projected` in that mode; `:projected` projects it always |
 | `T₀`, `uapplied` | `0.1`, `15.5` | fraction of the load path over which the remanent magnetisation ramps up; applied compression (mm) |
 
 **4. A single configuration with a timing and memory report:**
 
 ```bash
-julia --project=. -t 18 bench/run_case.jl 1 1 20 5000 compiled 100
+julia --project=. -t 18 bench/run_case.jl 1 1 20 500 compiled 100000
 ```
 
-Arguments: index of `w` (1–5), index of `e` (1–5), concentration (%), number of load steps, backend, and
-the number of converged steps after which the run stops.
+Arguments: index of `w` (1–5), index of `e` (1–5), concentration (%), `nsteps`, backend, and the number of
+converged steps after which the run stops (`SMS_VTK=1` in the environment also writes the `.vtu` files).
+
+**5. Animation and force–displacement curve** of a configuration run with `paraview=true` (ParaView 5.12 or
+later for `pvbatch`, `ffmpeg` to assemble the video, Python 3 with `matplotlib`):
+
+```bash
+pvbatch data/visualization/render_frames.py <folder with Results.pvd> frames/
+ffmpeg -framerate 30 -i frames/frame_%04d.png -c:v libx264 -pix_fmt yuv420p animation.mp4
+python3 data/visualization/plot_force_displacement.py curve.png results_A.json:"c = 20 %" results_B.json:"c = 30 %"
+```
 
 ## Running the neural-network surrogate
 
