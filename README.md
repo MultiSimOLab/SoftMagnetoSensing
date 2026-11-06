@@ -10,9 +10,11 @@ gap. Under compression the magnetic attraction closes the gap and switches a con
 off: a binary, piezoresistive response set by the geometry and the particle concentration of the device.
 
 <p align="center">
-  <img src="docs/img/sensor_c20_vs_c30.gif" width="90%" alt="Finite element simulation of the sensor with 20 % and 30 % particle concentration">
+  <img src="docs/img/sensor_stage1.jpeg" width="32%" alt="Sensor at the first stage of the loading: gap open">
+  <img src="docs/img/sensor_stage2.jpeg" width="32%" alt="Sensor at an intermediate stage of the loading">
+  <img src="docs/img/sensor_stage3.jpeg" width="32%" alt="Sensor at the last stage of the loading: gap closed">
 </p>
-<p align="center"><em>Finite element simulation of the sensor (gripper width w = 5 mm, gap e = 2 mm) with 20 % (left) and 30 % (right) particle concentration: the remanent magnetisation ramps up, then the device is compressed until the grippers snap into contact. Magnetic field lines and field magnitude (log scale) in the air; soft part of the grippers in light grey, hard-magnetic materials in black and dark grey.</em></p>
+<p align="center"><em>Finite element simulation of the sensor along the loading: deformed grippers and magnetic field lines in the surrounding air, from the open gap (left) to the closed gap (right).</em></p>
 
 The repository has two independent parts, each with its own Julia environment (`Project.toml` /
 `Manifest.toml`, versions pinned) and its own README with further detail:
