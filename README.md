@@ -30,15 +30,13 @@ The repository has two independent parts, each with its own Julia environment (`
 
 | Path | Content |
 |---|---|
-| `Project.toml`, `Manifest.toml` | Julia environment (Julia ≥ 1.12): HyperFEM 0.2, HyperFEMKernels 0.1, Gridap 0.19.9, GridapGmsh, JSON |
+| `Project.toml`, `Manifest.toml` | Julia environment (Julia ≥ 1.12): HyperFEM 0.3, HyperFEMKernels 0.2.5, Gridap 0.20.8, GridapGmsh, JSON |
 | `src/gripper_sensor.jl` | The model. `sensor_model(geomodel, w, e, αgrip, c; ...)` builds the constitutive models (air, soft part of the grippers, two hard-magnetic materials), the boundary conditions, the weak forms (monolithic displacement–magnetic potential problem, Maxwell traction on the solid–air interface, gradient-jump stabilisation of the air), the Newton–Raphson solver with an injectivity-preserving line search, and the post-processing. `run_case(...)` builds the model and solves it along the load path (adaptive load increments, 1/500 at most) |
 | `src/parametric_study.jl` | The full study: generates the meshes and solves the 50 configurations (5 widths `w` × 5 gaps `e` × 2 concentrations), several at a time |
 | `data/models/mesh_generation.jl` | Gmsh geometry and mesh of the device, `gripper_mesh(w, e, αgrip; dir)`; the `.msh` files are written to this folder |
 | `data/sims/` | Results, one JSON file per configuration: load factor `step` (Λ), reactions `t_top`, `t_bottom` on the loaded faces (vectors `[Rx, Ry]`) and vertical displacements of the four corners of the gap (`uy_top_right`, `uy_bottom_right`, `uy_top_left`, `uy_bottom_left`). Not tracked by git |
 | `data/visualization/render_frames.py` | ParaView (`pvbatch`) script rendering the frames of the animation of one configuration from its `.vtu` files |
 | `data/visualization/plot_force_displacement.py` | Force–displacement curve and gap opening of one or several configurations from their result files |
-| `bench/run_case.jl` | One configuration with a timing and memory report |
-| `bench/compare.py` | Comparison of two result files (maximum difference per quantity) |
 | `README.md` | Model, solver and performance |
 
 ### `NN_surrogate/` — neural-network surrogate
@@ -82,7 +80,7 @@ julia --project=. -t auto src/parametric_study.jl
 The script generates the meshes that are missing in `data/models/`, solves the 50 configurations (by
 default half as many at a time as Julia threads; the assembly kernels of all of them share the threads and
 the sparse LU of each case, which is serial, overlaps with the others) and writes the results to
-`data/sims/SmallMagnet_ParametricStudy/`. Each configuration takes about nine minutes on a workstation (see
+`data/sims/SmallMagnet_ParametricStudy/`. Each configuration takes about five and a half minutes on a workstation (see
 the performance section of [`FE_simulations/README.md`](FE_simulations/README.md#performance)).
 
 **3. A single configuration** from the Julia REPL (`julia --project=. -t auto` in `FE_simulations`):
@@ -113,16 +111,7 @@ Keywords of `run_case`:
 | `tangent`, `atol_projected` | `:hybrid`, `1e-8` | consistent tangent, switched to the projected (positive-definite) mechanical tangent only when the line search fails, with the absolute tolerance `atol_projected` in that mode; `:projected` projects it always |
 | `T₀`, `uapplied` | `0.1`, `15.5` | fraction of the load path over which the remanent magnetisation ramps up; applied compression (mm) |
 
-**4. A single configuration with a timing and memory report:**
-
-```bash
-julia --project=. -t 18 bench/run_case.jl 1 1 20 500 compiled 100000
-```
-
-Arguments: index of `w` (1–5), index of `e` (1–5), concentration (%), `nsteps`, backend, and the number of
-converged steps after which the run stops (`SMS_VTK=1` in the environment also writes the `.vtu` files).
-
-**5. Animation and force–displacement curve** of a configuration run with `paraview=true` (ParaView 5.12 or
+**4. Animation and force–displacement curve** of a configuration run with `paraview=true` (ParaView 5.12 or
 later for `pvbatch`, `ffmpeg` to assemble the video, Python 3 with `matplotlib`):
 
 ```bash
