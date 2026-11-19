@@ -142,11 +142,14 @@ function sensor_model(geomodel, w, e, αgrip, concentration;
    Pmaxw     = FEFunction(V_maxwell, zero_free_values(V_maxwell))
    Pmaxw_    = get_free_dof_values(Pmaxw)
 
+   # The nodal Maxwell forces of the air are carried to the interface by a Transfer between the two spaces
+   # (built once; the interface nodes are nodes of the air mesh, so it is a gather of dof values)
    Usolid_int = FESpace(Γsolid_int, reffeu)
    V_traction = TestFESpace(Γsolid_int, reffeu)
    U_traction = TrialFESpace(V_traction)
-   tmaxw      = interpolate_everywhere(Pmaxw, Usolid_int)
+   tmaxw      = FEFunction(Usolid_int, zero_free_values(Usolid_int))
    tmaxw_     = get_free_dof_values(tmaxw)
+   to_int     = Transfer(V_maxwell, Usolid_int)
    mass_int   = StaticLinearModel((u, v) -> ∫(u ⋅ v)dΓs, U_traction, V_traction, NothingBC(); backend)
 
    #******************************************************
@@ -184,7 +187,7 @@ function sensor_model(geomodel, w, e, αgrip, concentration;
    # state, interpolated onto the interface and L2-projected to the traction tmaxw
    res(Λ) = begin
       assemble_vector!(v -> ∫(∇(v)' ⊙ (∂ΨMax∂F ∘ (F ∘ (∇(xh[1])'), ℋ₀ ∘ (∇(xh[2])), Nh)))dΩair, Pmaxw_, V_maxwell)
-      interpolate_everywhere!(Interpolable(Pmaxw), tmaxw_, tmaxw.dirichlet_values, Usolid_int)
+      transfer!(tmaxw_, to_int, Pmaxw)
       mass_int(tmaxw_)
       set_magnetisation!(Λ)
 
@@ -209,19 +212,19 @@ function sensor_model(geomodel, w, e, αgrip, concentration;
          ∫(∇(vφ) ⋅ ((∂Ψs2∂H0H0 ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⋅ ∇(dφ)))dΩmag2 +
          ∫(∇(vφ) ⋅ ((∂Ψs3∂H0H0 ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⋅ ∇(dφ)))dΩmag3 +
          ∫(∇(vφ) ⋅ ((∂ΨMax∂H0H0 ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⋅ ∇(dφ)))dΩair +
-         ∫(∇(v)' ⊙ ((∂Ψs1∂FF ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ (∇(du)')))dΩmec1 +
-         ∫(∇(v)' ⊙ ((∂Ψs2∂FF ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ (∇(du)')))dΩmec2 +
-         ∫(∇(v)' ⊙ ((∂Ψs3∂FF ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ (∇(du)')))dΩmec3 +
-         ∫(∇(v)' ⊙ ((∂Ψair∂FF ∘ (F ∘ (∇(u)'))) ⊙ (∇(du)')))dΩair -
-         ∫(∇(vφ) ⋅ ((∂Ψs1∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(du)'))dΩmag1 -
-         ∫(∇(vφ) ⋅ ((∂Ψs2∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(du)'))dΩmag2 -
-         ∫(∇(vφ) ⋅ ((∂Ψs3∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(du)'))dΩmag3 -
-         ∫(∇(vφ) ⋅ ((∂ΨMax∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(du)'))dΩair -
+         ∫(∇(v)' ⊙ ((∂Ψs1∂FF ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⋅² (∇(du)')))dΩmec1 +
+         ∫(∇(v)' ⊙ ((∂Ψs2∂FF ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⋅² (∇(du)')))dΩmec2 +
+         ∫(∇(v)' ⊙ ((∂Ψs3∂FF ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⋅² (∇(du)')))dΩmec3 +
+         ∫(∇(v)' ⊙ ((∂Ψair∂FF ∘ (F ∘ (∇(u)'))) ⋅² (∇(du)')))dΩair -
+         ∫(∇(vφ) ⋅ ((∂Ψs1∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⋅² ∇(du)'))dΩmag1 -
+         ∫(∇(vφ) ⋅ ((∂Ψs2∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⋅² ∇(du)'))dΩmag2 -
+         ∫(∇(vφ) ⋅ ((∂Ψs3∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⋅² ∇(du)'))dΩmag3 -
+         ∫(∇(vφ) ⋅ ((∂ΨMax∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⋅² ∇(du)'))dΩair -
          # mechanical equations of the grippers with respect to φ (the air carries no Maxwell stress in its
          # mechanical equations: it acts on the solid through the explicit traction tmaxw)
-         ∫(∇(dφ) ⋅ ((∂Ψs1∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(v)'))dΩmec1 -
-         ∫(∇(dφ) ⋅ ((∂Ψs2∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(v)'))dΩmec2 -
-         ∫(∇(dφ) ⋅ ((∂Ψs3∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⊙ ∇(v)'))dΩmec3 +
+         ∫(∇(dφ) ⋅ ((∂Ψs1∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⋅² ∇(v)'))dΩmec1 -
+         ∫(∇(dφ) ⋅ ((∂Ψs2∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⋅² ∇(v)'))dΩmec2 -
+         ∫(∇(dφ) ⋅ ((∂Ψs3∂H0F ∘ (F ∘ (∇(u)'), ℋ₀ ∘ (∇(φ)), Nh)) ⋅² ∇(v)'))dΩmec3 +
          ∫(αj * (jump(∇(du)) ⊙ jump(∇(v))))dΓsk
    end
 
@@ -244,8 +247,8 @@ function sensor_model(geomodel, w, e, αgrip, concentration;
    solid_traction_  = get_free_dof_values(solid_traction)
    Utop             = FESpace(BoundaryTriangulation(Ωsolid_mec, tags="top_traction_boundary"), reffeu)
    Ubottom          = FESpace(BoundaryTriangulation(Ωsolid_mec, tags="bottom_traction_boundary"), reffeu)
-   top_traction     = interpolate_everywhere(solid_traction, Utop)
-   bottom_traction  = interpolate_everywhere(solid_traction, Ubottom)
+   to_top, to_bottom = Transfer(V_solid, Utop), Transfer(V_solid, Ubottom)
+   t_top, t_bottom  = zero_free_values(Utop), zero_free_values(Ubottom)
 
    results = (step=Float64[], t_top=Vector{Float64}[], t_bottom=Vector{Float64}[],
               uy_top_right=Float64[], uy_bottom_right=Float64[], uy_top_left=Float64[], uy_bottom_left=Float64[])
@@ -277,8 +280,8 @@ function sensor_model(geomodel, w, e, αgrip, concentration;
                   ∫(∇(v)' ⊙ (∂Ψs2∂F ∘ (F ∘ (∇(uh)'), ℋ₀ ∘ (∇(φh)), Nh)))dΩmec2 +
                   ∫(∇(v)' ⊙ (∂Ψs3∂F ∘ (F ∘ (∇(uh)'), ℋ₀ ∘ (∇(φh)), Nh)))dΩmec3
       assemble_vector!(lsolid, solid_traction_, V_solid)
-      t_top    = get_free_dof_values(interpolate_everywhere!(Interpolable(solid_traction), get_free_dof_values(top_traction), top_traction.dirichlet_values, Utop))
-      t_bottom = get_free_dof_values(interpolate_everywhere!(Interpolable(solid_traction), get_free_dof_values(bottom_traction), bottom_traction.dirichlet_values, Ubottom))
+      transfer!(t_top, to_top, solid_traction)
+      transfer!(t_bottom, to_bottom, solid_traction)
       push!(results.t_top,    -vec(sum(reshape(t_top, 2, :), dims=2)))
       push!(results.t_bottom, -vec(sum(reshape(t_bottom, 2, :), dims=2)))
       push!(results.uy_top_right,    uh(VectorValue(4.5, 7.5))[2])

@@ -21,7 +21,7 @@ kernels of [HyperFEMKernels](https://github.com/MultiSimOLab/HyperFEMKernels.jl)
 ## Contents
 
 ```
-Project.toml / Manifest.toml      Julia environment (Julia ≥ 1.12, HyperFEM 0.2, HyperFEMKernels 0.1.2)
+Project.toml / Manifest.toml      Julia environment (Julia ≥ 1.12, HyperFEM 0.3, HyperFEMKernels 0.2.5)
 README.md
 src/
   gripper_sensor.jl               sensor_model(...): constitutive models, weak forms, solver and
@@ -33,7 +33,6 @@ data/sims/                        results, one JSON file per configuration
 data/visualization/
   render_frames.py                ParaView script: frames of the animation of one configuration
   plot_force_displacement.py      force–displacement curve and gap opening from the result files
-bench/                            timing script and comparison of two result files
 ```
 
 ## Installation
@@ -101,19 +100,22 @@ unit thickness) and opening of the gap against the imposed compression, for 20 %
 
 ## Performance
 
-Full load path (Λ from 0 to 1), configuration `w = 5, e = 2` (31 683 dofs), Apple M5 Max, 18 Julia threads:
+Full load path (Λ from 0 to 1), configuration `w = 5, e = 2` (31 683 dofs), Apple M5 Max, 18 Julia threads,
+Julia 1.13, HyperFEM 0.3.0, HyperFEMKernels 0.2.5:
 
 | | c = 20 % | c = 30 % |
 |---|---|---|
-| load increments (bisections) | 509 (15) | 501 (1) |
-| Newton iterations | 1188 | 1237 |
-| total time (including compilation) | 8.8 min | 8.6 min |
-| peak resident memory | 6.5 GB | 6.6 GB |
+| load increments (bisections) | 500 (0) | 500 (0) |
+| Newton iterations | 654 | 684 |
+| time of the solution (including the compilation of the first step) | 5.4 min | 5.5 min |
+| peak resident memory | 10.8 GB | 10.8 GB |
 
-The full parametric study (50 configurations) takes about seven hours run one after the other, less with
-several configurations at a time. With the adaptive increments, the difference with a solution computed with
-10 times smaller increments is 0.04 % in the gap displacements and 1–3 % in the reactions (the first-order
-error of the Maxwell traction, evaluated once per increment).
+The full parametric study (50 configurations) takes about four hours run one after the other in one Julia session
+(the compilation is paid once), less with several configurations at a time, each of them with its own peak memory.
+The Newton converges quadratically (corrected tangent of the hard-magnetic model in HyperFEM 0.3), which halves the
+iterations of HyperFEM 0.2. With the adaptive increments (measured with HyperFEM 0.2), the difference with a
+solution computed with 10 times smaller increments is 0.04 % in the gap displacements and 1–3 % in the reactions
+(the first-order error of the Maxwell traction, evaluated once per increment).
 
 ## Citation
 
